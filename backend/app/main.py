@@ -10,7 +10,6 @@ from .cad_engine import export_model
 
 load_dotenv(Path(__file__).parents[1]/".env")
 ROOT=Path(__file__).parents[1]/"generated"; MODELS={}
-LATEST_PROPOSAL: DesignSpec | None = None
 app=FastAPI(title="Forge AI CAD API",version="0.1.0")
 app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:5174","http://127.0.0.1:5174"],allow_methods=["*"],allow_headers=["*"])
 
@@ -19,15 +18,8 @@ def health(): return {"status":"ok","ai_enabled":bool(os.getenv("OPENAI_API_KEY"
 
 @app.post("/api/chat",response_model=ChatResponse)
 def ai_chat(req: ChatRequest):
-    global LATEST_PROPOSAL
     try:
-        command=req.message.strip().lower()
-        confirmation=bool(re.fullmatch(r"(?:yes[, ]+|please\s+)?(?:design|generate|proceed|build)(?:\s+(?:it|this))?[.!]?",command)) or command in {"go ahead","approved"}
-        if confirmation and req.current_spec is None and LATEST_PROPOSAL is not None:
-            req=req.model_copy(update={"current_spec":LATEST_PROPOSAL})
         response=chat(req)
-        if response.spec is not None:
-            LATEST_PROPOSAL=response.spec
         return response
     except Exception as e: raise HTTPException(502,f"AI request failed: {e}")
 

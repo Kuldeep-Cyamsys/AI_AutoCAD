@@ -1,4 +1,6 @@
 from typing import Literal
+import base64
+import binascii
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -107,6 +109,7 @@ class DesignSpec(BaseModel):
     material: Literal["aluminum", "steel", "plastic", "brass", "wood", "generic"] = "generic"
     color: str = Field("#8fa8bd", pattern=r"^#[0-9A-Fa-f]{6}$")
     revision: int = Field(1, ge=1)
+    design_notes: list[str] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
     def validate_design(self):
@@ -131,9 +134,45 @@ class DesignSpec(BaseModel):
         return self
 
 
+class ImageAttachment(BaseModel):
+    name: str = Field(max_length=200)
+    data_url: str = Field(max_length=7_000_000)
+
+    @model_validator(mode="after")
+    def validate_image(self):
+        header, separator, payload = self.data_url.partition(",")
+        if not separator or header not in {"data:image/png;base64", "data:image/jpeg;base64", "data:image/webp;base64"}:
+            raise ValueError("Attach a PNG, JPEG, or WebP image")
+        try:
+            data = base64.b64decode(payload, validate=True)
+        except (ValueError, binascii.Error):
+            raise ValueError("Invalid image encoding")
+        if not data or len(data) > 5 * 1024 * 1024:
+            raise ValueError("Images must be between 1 byte and 5 MB")
+        signatures = {"data:image/png;base64": data.startswith(b"\x89PNG\r\n\x1a\n"), "data:image/jpeg;base64": data.startswith(b"\xff\xd8\xff"), "data:image/webp;base64": data.startswith(b"RIFF") and data[8:12] == b"WEBP"}
+        if not signatures[header]:
+            raise ValueError("Image content does not match its format")
+        return self
+
+
+class ConversationMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=30000)
+    images: list[ImageAttachment] = Field(default_factory=list, max_length=3)
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     current_spec: DesignSpec | None = None
+    images: list[ImageAttachment] = Field(default_factory=list, max_length=3)
+    history: list[ConversationMessage] = Field(default_factory=list, max_length=200)
+
+
+class Calculation(BaseModel):
+    label: str
+    expression: str = Field(max_length=200)
+    result: float = Field(allow_inf_nan=False)
+    units: str = "mm"
 
 
 class ChatResponse(BaseModel):
@@ -141,6 +180,7 @@ class ChatResponse(BaseModel):
     message: str
     spec: DesignSpec | None = None
     defaults: list[str] = Field(default_factory=list)
+    calculations: list[Calculation] = Field(default_factory=list, max_length=40)
 
 
 class GenerateResponse(BaseModel):

@@ -4,6 +4,8 @@ Forge AI is a local React + FastAPI prototype that converts natural-language des
 
 ## Prerequisites
 
+For implementation changes, setup history, and verification limits since the initial clone, see [Changes Since Cloning](CHANGES_SINCE_CLONE.md).
+
 - Windows 10/11 with PowerShell
 - Python 3.10
 - Node.js 20 or newer
